@@ -1,11 +1,13 @@
-// VÆX Builder Bot — Full Roles + Perms + AutoRole
+// VÆX Builder Bot — Roles + Permissions + Auto-Role + /buildserver
 require("dotenv").config();
+
 const {
   Client,
   GatewayIntentBits,
   SlashCommandBuilder,
   REST,
-  Routes
+  Routes,
+  PermissionFlagsBits
 } = require("discord.js");
 
 // ------------------------------------
@@ -19,12 +21,12 @@ const client = new Client({
 });
 
 // ------------------------------------
-// Register slash command /buildserver
+// Slash command: /buildserver
 // ------------------------------------
 const commands = [
   new SlashCommandBuilder()
     .setName("buildserver")
-    .setDescription("Build your entire VÆX server automatically")
+    .setDescription("Set up all VÆX roles, perms, and auto-role")
 ].map(cmd => cmd.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -32,10 +34,11 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 (async () => {
   try {
     console.log("Registering slash commands...");
-    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), {
-      body: commands
-    });
-    console.log("Slash commands registered.");
+    await rest.put(
+      Routes.applicationCommands(process.env.CLIENT_ID),
+      { body: commands }
+    );
+    console.log("✅ Slash command /buildserver registered.");
   } catch (e) {
     console.error("Slash command registration error:", e);
   }
@@ -45,11 +48,11 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 // Ready event
 // ------------------------------------
 client.on("ready", () => {
-  console.log(`VÆX Builder online as ${client.user.tag}`);
+  console.log(`🔥 VÆX Builder online as ${client.user.tag}`);
 });
 
 // ------------------------------------
-// Auto-role system
+// Auto-role: give VÆX MEMBER on join
 // ------------------------------------
 client.on("guildMemberAdd", async member => {
   const role = member.guild.roles.cache.find(r => r.name === "VÆX MEMBER");
@@ -59,7 +62,7 @@ client.on("guildMemberAdd", async member => {
 });
 
 // ------------------------------------
-// Slash command handler
+// Interaction handler
 // ------------------------------------
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
@@ -67,52 +70,56 @@ client.on("interactionCreate", async interaction => {
 
   const guild = interaction.guild;
 
-  await interaction.reply("⚙️ Building your VÆX server...");
+  await interaction.reply("⚙️ Setting up **VÆX** roles, permissions, and auto-role...");
 
   // ------------------------------------
-  // ROLES + PERMISSIONS
+  // ROLE DEFINITIONS (edgy VÆX palette)
   // ------------------------------------
   const roleData = [
-    ["OWNER", "#ff0000", { Administrator: true }],
-    [
-      "ADMIN",
-      "#ff3300",
-      {
-        ManageGuild: true,
-        ManageRoles: true,
-        ManageChannels: true,
-        KickMembers: true,
-        BanMembers: true,
-        ModerateMembers: true,
-        ManageMessages: true,
-        ManageWebhooks: true
-      }
-    ],
-    [
-      "MOD",
-      "#ff6600",
-      {
-        KickMembers: true,
-        ModerateMembers: true,
-        ManageMessages: true,
-        MoveMembers: true
-      }
-    ],
-    ["ENFORCER", "#cc6600", { ModerateMembers: true, ManageMessages: true }],
-    ["SENTRY", "#996600", {}],
+    // name, color, permissions array
+    ["OWNER", "#B00000", [PermissionFlagsBits.Administrator]],
 
-    ["VÆX ELITE", "#9900ff", {}],
-    ["OG", "#00e6e6", {}],
-    ["BOOSTER", "#ff73fa", {}],
-    ["GAMER", "#00ff40", {}],
-    ["BOT", "#7289da", {}],
+    ["ADMIN", "#D12A00", [
+      PermissionFlagsBits.ManageGuild,
+      PermissionFlagsBits.ManageRoles,
+      PermissionFlagsBits.ManageChannels,
+      PermissionFlagsBits.KickMembers,
+      PermissionFlagsBits.BanMembers,
+      PermissionFlagsBits.ModerateMembers,
+      PermissionFlagsBits.ManageMessages,
+      PermissionFlagsBits.ManageWebhooks,
+      PermissionFlagsBits.ViewAuditLog
+    ]],
 
-    ["VÆX MEMBER", "#ffffff", {}],
-    ["VISITOR", "#a0a0a0", {}]
+    ["MOD", "#E05A00", [
+      PermissionFlagsBits.KickMembers,
+      PermissionFlagsBits.ModerateMembers,
+      PermissionFlagsBits.ManageMessages,
+      PermissionFlagsBits.MoveMembers
+    ]],
+
+    ["ENFORCER", "#A84C00", [
+      PermissionFlagsBits.ModerateMembers,
+      PermissionFlagsBits.ManageMessages
+    ]],
+
+    ["SENTRY", "#734000", []],
+
+    ["VÆX ELITE", "#7A00CC", []],
+    ["OG", "#00B3B3", []],
+    ["BOOSTER", "#CC5AD6", []],
+    ["GAMER", "#00CC39", []],
+    ["BOT", "#677BC4", []],
+
+    ["VÆX MEMBER", "#E6E6E6", []],
+    ["VISITOR", "#808080", []]
   ];
 
-  let createdRoles = {};
+  const createdRoles = {};
 
+  // ------------------------------------
+  // CREATE ROLES (or reuse existing)
+  // ------------------------------------
   for (const [name, color, perms] of roleData) {
     let role = guild.roles.cache.find(r => r.name === name);
 
@@ -120,49 +127,63 @@ client.on("interactionCreate", async interaction => {
       role = await guild.roles.create({
         name,
         color,
-        permissions: Object.keys(perms).length ? perms : [],
-        reason: "VÆX Builder role setup"
+        permissions: perms,
+        reason: "VÆX Builder role creation"
       });
+      console.log(`Created role: ${name}`);
+    } else {
+      // Optionally update color/perms if it already exists
+      await role.edit({
+        color,
+        permissions: perms
+      }).catch(() => {});
+      console.log(`Updated role: ${name}`);
     }
 
     createdRoles[name] = role;
   }
 
   // ------------------------------------
-  // SORT ROLES (Hierarchy)
+  // SORT ROLES (best effort)
   // ------------------------------------
-  const order = [
-    "OWNER",
-    "ADMIN",
-    "MOD",
-    "ENFORCER",
-    "SENTRY",
-    "VÆX ELITE",
-    "OG",
-    "BOOSTER",
-    "GAMER",
-    "BOT",
-    "VÆX MEMBER",
-    "VISITOR"
-  ];
+  try {
+    const orderTopToBottom = [
+      "OWNER",
+      "ADMIN",
+      "MOD",
+      "ENFORCER",
+      "SENTRY",
+      "VÆX ELITE",
+      "OG",
+      "BOOSTER",
+      "GAMER",
+      "BOT",
+      "VÆX MEMBER",
+      "VISITOR"
+    ];
 
-  let position = guild.roles.highest.position - 1;
+    // Start just below the bot's highest role
+    const botMember = await guild.members.fetch(client.user.id);
+    const botHighest = botMember.roles.highest.position;
+    let pos = botHighest - 1;
 
-  for (const name of order) {
-    const role = createdRoles[name];
-    if (role) {
-      await role.setPosition(position);
-      position--;
+    for (const name of orderTopToBottom) {
+      const role = createdRoles[name];
+      if (!role) continue;
+      await role.setPosition(pos).catch(() => {});
+      pos--;
     }
+  } catch (e) {
+    console.warn("Could not sort roles (check bot role position):", e.message);
   }
 
   // ------------------------------------
-  // Done
+  // DONE
   // ------------------------------------
-  await interaction.followUp("🔥 **VÆX roles, perms, and auto-role setup complete!**");
+  await interaction.followUp("🔥 **VÆX roles, colors, permissions, and auto-role are now set up!**\nMake sure the bot's role is high enough above these roles to manage them.");
 });
 
 // ------------------------------------
-// Start bot
+// Login
 // ------------------------------------
 client.login(process.env.TOKEN);
