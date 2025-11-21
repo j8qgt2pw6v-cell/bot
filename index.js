@@ -1,95 +1,168 @@
-import { Client, GatewayIntentBits, Partials, REST, Routes, PermissionFlagsBits } from "discord.js";
-import dotenv from "dotenv";
-dotenv.config();
+// VÆX Builder Bot — Full Roles + Perms + AutoRole
+require("dotenv").config();
+const {
+  Client,
+  GatewayIntentBits,
+  SlashCommandBuilder,
+  REST,
+  Routes
+} = require("discord.js");
 
+// ------------------------------------
+// Create the Discord client
+// ------------------------------------
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers
-  ],
-  partials: [Partials.Channel]
+  ]
 });
 
-client.once("ready", async () => {
-  console.log(`🔥 Logged in as ${client.user.tag}`);
+// ------------------------------------
+// Register slash command /buildserver
+// ------------------------------------
+const commands = [
+  new SlashCommandBuilder()
+    .setName("buildserver")
+    .setDescription("Build your entire VÆX server automatically")
+].map(cmd => cmd.toJSON());
 
-  const commands = [
-    {
-      name: "buildserver",
-      description: "Build the full VÆX server automatically.",
-      default_member_permissions: PermissionFlagsBits.Administrator.toString()
-    }
+const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+
+(async () => {
+  try {
+    console.log("Registering slash commands...");
+    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), {
+      body: commands
+    });
+    console.log("Slash commands registered.");
+  } catch (e) {
+    console.error("Slash command registration error:", e);
+  }
+})();
+
+// ------------------------------------
+// Ready event
+// ------------------------------------
+client.on("ready", () => {
+  console.log(`VÆX Builder online as ${client.user.tag}`);
+});
+
+// ------------------------------------
+// Auto-role system
+// ------------------------------------
+client.on("guildMemberAdd", async member => {
+  const role = member.guild.roles.cache.find(r => r.name === "VÆX MEMBER");
+  if (role) {
+    member.roles.add(role).catch(() => {});
+  }
+});
+
+// ------------------------------------
+// Slash command handler
+// ------------------------------------
+client.on("interactionCreate", async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+  if (interaction.commandName !== "buildserver") return;
+
+  const guild = interaction.guild;
+
+  await interaction.reply("⚙️ Building your VÆX server...");
+
+  // ------------------------------------
+  // ROLES + PERMISSIONS
+  // ------------------------------------
+  const roleData = [
+    ["OWNER", "#ff0000", { Administrator: true }],
+    [
+      "ADMIN",
+      "#ff3300",
+      {
+        ManageGuild: true,
+        ManageRoles: true,
+        ManageChannels: true,
+        KickMembers: true,
+        BanMembers: true,
+        ModerateMembers: true,
+        ManageMessages: true,
+        ManageWebhooks: true
+      }
+    ],
+    [
+      "MOD",
+      "#ff6600",
+      {
+        KickMembers: true,
+        ModerateMembers: true,
+        ManageMessages: true,
+        MoveMembers: true
+      }
+    ],
+    ["ENFORCER", "#cc6600", { ModerateMembers: true, ManageMessages: true }],
+    ["SENTRY", "#996600", {}],
+
+    ["VÆX ELITE", "#9900ff", {}],
+    ["OG", "#00e6e6", {}],
+    ["BOOSTER", "#ff73fa", {}],
+    ["GAMER", "#00ff40", {}],
+    ["BOT", "#7289da", {}],
+
+    ["VÆX MEMBER", "#ffffff", {}],
+    ["VISITOR", "#a0a0a0", {}]
   ];
 
-  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+  let createdRoles = {};
 
-  try {
-    await rest.put(
-      Routes.applicationCommands(client.user.id),
-      { body: commands }
-    );
-    console.log("✅ Slash command /buildserver registered.");
-  } catch (error) {
-    console.error(error);
-  }
-});
+  for (const [name, color, perms] of roleData) {
+    let role = guild.roles.cache.find(r => r.name === name);
 
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-
-  if (interaction.commandName === "buildserver") {
-    await interaction.reply("⚡ Building **VÆX Server**... Please wait.");
-
-    const guild = interaction.guild;
-    guild.channels.cache.forEach(c => c.delete().catch(() => {}));
-
-    const core = await guild.channels.create({ name: "📜 VÆX CORE", type: 4 });
-    const community = await guild.channels.create({ name: "💬 COMMUNITY", type: 4 });
-    const lounge = await guild.channels.create({ name: "🔥 VÆX LOUNGE", type: 4 });
-    const gaming = await guild.channels.create({ name: "🎮 GAMING", type: 4 });
-    const botzone = await guild.channels.create({ name: "🤖 BOT ZONE", type: 4 });
-    const voicecat = await guild.channels.create({ name: "🎙 VOICE", type: 4 });
-    const staff = await guild.channels.create({ name: "🛡 STAFF", type: 4 });
-
-    const textChannels = [
-      { cat: core, names: ["📢・announcements", "📥・updates", "👋・welcome", "📜・rules", "🎉・events"] },
-      { cat: community, names: ["💬・general-chat", "📸・media", "🎭・memes", "🎧・music", "❓・help"] },
-      { cat: lounge, names: ["💀・elite-chat", "⚡・clips", "🖤・aesthetic-drops", "🔥・highlights"] },
-      { cat: gaming, names: ["🎮・gaming-chat", "🕹・team-finder", "🏆・rank-updates", "⚔️・fortnite", "💢・cod", "👽・valorant"] },
-      { cat: botzone, names: ["🤖・bot-commands", "📊・level-up", "🎁・giveaways"] },
-      { cat: staff, names: ["🛡・staff-chat", "🛠・staff-tools", "📄・reports", "🚨・mod-logs", "📚・archive"] }
-    ];
-
-    for (const group of textChannels) {
-      for (const name of group.names) {
-        await guild.channels.create({ name, type: 0, parent: group.cat.id });
-      }
+    if (!role) {
+      role = await guild.roles.create({
+        name,
+        color,
+        permissions: Object.keys(perms).length ? perms : [],
+        reason: "VÆX Builder role setup"
+      });
     }
 
-    const voiceNames = [
-      "🔊・Lobby",
-      "🎮・Gaming Room 1",
-      "🎮・Gaming Room 2",
-      "🔥・Elite Voice",
-      "🩸・AFK"
-    ];
-
-    for (const name of voiceNames) {
-      await guild.channels.create({ name, type: 2, parent: voicecat.id });
-    }
-
-    const roleNames = [
-      "OWNER","ADMIN","MOD","ENFORCER","SENTRY","VÆX ELITE",
-      "VÆX MEMBER","GAMER","OG","BOOSTER","BOT","VISITOR"
-    ];
-
-    for (const r of roleNames) await guild.roles.create({ name: r });
-
-    await staff.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false });
-
-    await interaction.followUp("🔥 **VÆX Server Build Complete!**");
+    createdRoles[name] = role;
   }
+
+  // ------------------------------------
+  // SORT ROLES (Hierarchy)
+  // ------------------------------------
+  const order = [
+    "OWNER",
+    "ADMIN",
+    "MOD",
+    "ENFORCER",
+    "SENTRY",
+    "VÆX ELITE",
+    "OG",
+    "BOOSTER",
+    "GAMER",
+    "BOT",
+    "VÆX MEMBER",
+    "VISITOR"
+  ];
+
+  let position = guild.roles.highest.position - 1;
+
+  for (const name of order) {
+    const role = createdRoles[name];
+    if (role) {
+      await role.setPosition(position);
+      position--;
+    }
+  }
+
+  // ------------------------------------
+  // Done
+  // ------------------------------------
+  await interaction.followUp("🔥 **VÆX roles, perms, and auto-role setup complete!**");
 });
 
+// ------------------------------------
+// Start bot
+// ------------------------------------
 client.login(process.env.TOKEN);
