@@ -7,7 +7,8 @@ const {
   SlashCommandBuilder,
   REST,
   Routes,
-  PermissionFlagsBits
+  PermissionFlagsBits,
+  ChannelType
 } = require("discord.js");
 
 // ------------------------------------
@@ -26,7 +27,7 @@ const client = new Client({
 const commands = [
   new SlashCommandBuilder()
     .setName("buildserver")
-    .setDescription("Set up all VÆX roles, perms, and auto-role")
+    .setDescription("Set up all VÆX roles, perms, auto-role, and channels")
 ].map(cmd => cmd.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -70,7 +71,7 @@ client.on("interactionCreate", async interaction => {
 
   const guild = interaction.guild;
 
-  await interaction.reply("⚙️ Setting up **VÆX** roles, permissions, and auto-role...");
+  await interaction.reply("⚙️ Setting up **VÆX** roles, permissions, auto-role, and channels...");
 
   // ------------------------------------
   // ROLE DEFINITIONS (edgy VÆX palette)
@@ -178,9 +179,78 @@ client.on("interactionCreate", async interaction => {
   }
 
   // ------------------------------------
+  // CATEGORIES + CHANNELS (safe create)
+  // ------------------------------------
+  const channelLayout = {
+    "📜 VÆX CORE": [
+      "📢・announcements",
+      "👋・welcome",
+      "📜・rules",
+      "📥・updates"
+    ],
+    "💬 COMMUNITY": [
+      "💬・general-chat",
+      "📸・media",
+      "🎭・memes",
+      "🎧・music",
+      "❓・help"
+    ],
+    "🎮 GAMING": [
+      "🎮・gaming-chat",
+      "🕹・team-finder"
+    ],
+    "🤖 BOT ZONE": [
+      "🤖・bot-commands",
+      "📊・level-up"
+    ],
+    "🛡 STAFF": [
+      "🛡・staff-chat",
+      "🚨・mod-logs"
+    ]
+  };
+
+  const categoryMap = {};
+
+  // Create categories if missing
+  for (const catName of Object.keys(channelLayout)) {
+    let category = guild.channels.cache.find(
+      c => c.name === catName && c.type === ChannelType.GuildCategory
+    );
+
+    if (!category) {
+      category = await guild.channels.create({
+        name: catName,
+        type: ChannelType.GuildCategory
+      });
+      console.log("Created category:", catName);
+    }
+
+    categoryMap[catName] = category;
+  }
+
+  // Create channels if missing
+  for (const [catName, channels] of Object.entries(channelLayout)) {
+    const category = categoryMap[catName];
+    for (const chName of channels) {
+      let existing = guild.channels.cache.find(c => c.name === chName);
+      if (!existing) {
+        await guild.channels.create({
+          name: chName,
+          type: ChannelType.GuildText,
+          parent: category.id
+        });
+        console.log(`Created channel: ${chName} (in ${catName})`);
+      }
+    }
+  }
+
+  // ------------------------------------
   // DONE
   // ------------------------------------
-  await interaction.followUp("🔥 **VÆX roles, colors, permissions, and auto-role are now set up!**\nMake sure the bot's role is high enough above these roles to manage them.");
+  await interaction.followUp(
+    "🔥 **VÆX roles, colors, permissions, auto-role, and channels are now set up!**\n" +
+    "Make sure the bot's role is above these roles so it can manage them."
+  );
 });
 
 // ------------------------------------
